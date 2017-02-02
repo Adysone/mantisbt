@@ -1,0 +1,4 @@
+Require all denied
+# Require ip 127.0.0.1
+# Require ip 194.250.119.81
+# Require ip 10.0.8
