@@ -49,3 +49,6 @@ web.config
 # Libraries
 library/FirePHPCore
 library/ezc
+
+# Custom
+/uploads/
