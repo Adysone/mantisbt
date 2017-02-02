@@ -758,7 +758,7 @@ function file_add( $p_bug_id, array $p_file, $p_table = 'bug', $p_title = '', $p
 
 			$t_disk_file_name = $t_file_path . $t_unique_name;
 			if( !file_exists( $t_disk_file_name ) ) {
-				if( !move_uploaded_file( $t_tmp_file, $t_disk_file_name ) ) {
+				if( !rename( $t_tmp_file, $t_disk_file_name ) ) {
 					trigger_error( ERROR_FILE_MOVE_FAILED, ERROR );
 				}
 
