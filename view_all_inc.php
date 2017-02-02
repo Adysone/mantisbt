@@ -188,8 +188,9 @@ function write_bug_rows( array $p_rows ) {
 <?php
 			$t_in_stickies = false;
 		}
+		$status_color = get_status_color( $t_row->status, auth_get_current_user_id(), $t_row->project_id );
 
-		echo '<tr>';
+		echo '<tr style="background-color: ' . $status_color . '">';
 
 		$t_column_value_function = 'print_column_value';
 		foreach( $g_columns as $t_column ) {
