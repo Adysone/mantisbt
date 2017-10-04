@@ -50,6 +50,7 @@
  * @uses user_api.php
  * @uses utility_api.php
  * @uses layout_api.php
+ * @uses api_token_api.php
  */
 
 require_api( 'access_api.php' );
@@ -76,6 +77,7 @@ require_api( 'string_api.php' );
 require_api( 'user_api.php' );
 require_api( 'utility_api.php' );
 require_api( 'layout_api.php' );
+require_api( 'api_token_api.php' );
 
 $g_rss_feed_url = null;
 
@@ -207,13 +209,6 @@ function require_css( $p_stylesheet_path ) {
 function html_css() {
 	global $g_stylesheets_included;
 	html_css_link( config_get( 'css_include_file' ) );
-
-	if ( config_get_global( 'cdn_enabled' ) == ON ) {
-		html_css_cdn_link( 'https://ajax.googleapis.com/ajax/libs/jqueryui/' . JQUERY_UI_VERSION . '/themes/smoothness/jquery-ui.min.css' );
-	} else {
-		html_css_link( 'jquery-ui-' . JQUERY_UI_VERSION . '.min.css' );
-	}
-
 	html_css_link( 'common_config.php' );
 	# Add right-to-left css if needed
 	if( lang_get( 'directionality' ) == 'rtl' ) {
@@ -223,7 +218,12 @@ function html_css() {
 		html_css_link( $t_stylesheet_path );
 	}
 
-	html_css_link( 'dropzone.css' );
+	# dropzone css
+	if ( config_get_global( 'cdn_enabled' ) == ON ) {
+		html_css_cdn_link( 'https://cdnjs.cloudflare.com/ajax/libs/dropzone/' . DROPZONE_VERSION . '/min/dropzone.min.css' );
+	} else {
+		html_css_link( 'dropzone-' . DROPZONE_VERSION . '.min.css' );
+	}
 }
 
 /**
@@ -302,14 +302,19 @@ function html_head_javascript() {
 	echo "\t" . '<script type="text/javascript" src="' . helper_mantis_url( 'javascript_translations.php' ) . '"></script>' . "\n";
 
 	if ( config_get_global( 'cdn_enabled' ) == ON ) {
+		# JQuery
 		html_javascript_cdn_link( 'https://ajax.googleapis.com/ajax/libs/jquery/' . JQUERY_VERSION . '/jquery.min.js', JQUERY_HASH );
-		html_javascript_cdn_link( 'https://ajax.googleapis.com/ajax/libs/jqueryui/' . JQUERY_UI_VERSION . '/jquery-ui.min.js', JQUERY_UI_HASH );
+
+		# Dropzone
+		html_javascript_cdn_link( 'https://cdnjs.cloudflare.com/ajax/libs/dropzone/' . DROPZONE_VERSION . '/min/dropzone.min.js', DROPZONE_HASH );
 	} else {
+		# JQuery
 		html_javascript_link( 'jquery-' . JQUERY_VERSION . '.min.js' );
-		html_javascript_link( 'jquery-ui-' . JQUERY_UI_VERSION . '.min.js' );
+
+		# Dropzone
+		html_javascript_link( 'dropzone-' . DROPZONE_VERSION . '.min.js' );
 	}
 
-	html_javascript_link( 'dropzone.min.js');
 	html_javascript_link( 'common.js' );
 	foreach ( $g_scripts_included as $t_script_path ) {
 		html_javascript_link( $t_script_path );
@@ -635,9 +640,12 @@ function print_manage_menu( $p_page = '' ) {
 		echo '</li>' . "\n";
 	}
 
-	# Plugins menu items - these are cooked links
+	# Plugins menu items - these are html hyperlinks (<a> tags)
 	foreach( $t_menu_options as $t_menu_item ) {
-		echo '<li>', $t_menu_item, '</li>';
+		$t_active = $p_page && strpos( $t_menu_item, $p_page ) !== false
+			? ' class="active"'
+			: '';
+		echo "<li{$t_active}>", $t_menu_item, '</li>';
 	}
 
 	echo '</ul>' . "\n";
@@ -736,7 +744,9 @@ function print_account_menu( $p_page = '' ) {
 		$t_pages['account_sponsor_page.php'] = array( 'url'=>'account_sponsor_page.php', 'label'=>'my_sponsorship' );
 	}
 
-	$t_pages['api_tokens_page.php'] = array( 'url' => 'api_tokens_page.php', 'label' => 'api_tokens_link' );
+	if( api_token_can_create() ) {
+		$t_pages['api_tokens_page.php'] = array( 'url' => 'api_tokens_page.php', 'label' => 'api_tokens_link' );
+	}
 
 	# Plugin / Event added options
 	$t_event_menu_options = event_signal( 'EVENT_MENU_ACCOUNT' );
@@ -1574,7 +1584,7 @@ class TableFieldsItem {
 			$p_colspan = 1;
 		}
 		$this->colspan = $p_colspan;
-		$this->atr_class = $p_class;
+		$this->attr_class = $p_class;
 		$this->content_attr_id = $p_content_id;
 		$this->header_attr_id = $p_header_id;
 	}

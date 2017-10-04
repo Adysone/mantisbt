@@ -136,9 +136,6 @@ $t_block_icon = $t_collapse_block ? 'fa-chevron-down' : 'fa-chevron-up';
 							</td>
 						</tr>
 					</table>
-				</div>
-			</div>
-		</form>
 
 		<?php
 			# Print time tracking information if requested
@@ -201,10 +198,13 @@ $t_block_icon = $t_collapse_block ? 'fa-chevron-down' : 'fa-chevron-up';
 						</tr>
 					</table>
 				</div>
-
 			<?php
 			} # end if
 		?>
 
+				</div>
+			</div>
+		</form>
 	</div>
 </div>
+

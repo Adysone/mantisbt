@@ -200,8 +200,7 @@ function columns_get_custom_fields() {
 	$t_all_cfids = custom_field_get_ids();
 	$t_col_names = array();
 	foreach( $t_all_cfids as $t_id ) {
-		$t_def = custom_field_get_definition( $t_id );
-		$t_col_names[] = 'custom_' . $t_def['name'];
+		$t_col_names[] = column_get_custom_field_column_name( $t_id );
 	}
 	return $t_col_names;
 }
@@ -322,6 +321,10 @@ function column_is_sortable( $p_column ) {
 		case 'attachment_count':
 		case 'tags':
 		case 'overdue':
+		case 'additional_information':
+		case 'description':
+		case 'notes':
+		case 'steps_to_reproduce':
 			return false;
 	}
 
@@ -344,6 +347,21 @@ function column_get_custom_field_name( $p_column ) {
 	}
 
 	return null;
+}
+
+/**
+ * Returns the name of a column corresponding to a custom field, providing the id as parameter.
+ *
+ * @param integer $p_cf_id	Custom field id
+ * @return string	The column name
+ */
+function column_get_custom_field_column_name( $p_cf_id ) {
+	$t_def = custom_field_get_definition( $p_cf_id );
+	if( $t_def ) {
+		return 'custom_' . $t_def['name'];
+	} else {
+		return null;
+	}
 }
 
 /**
@@ -1372,7 +1390,7 @@ function print_column_status( BugData $p_bug, $p_columns_target = COLUMNS_TARGET
 	$status_label = html_get_status_css_class( $p_bug->status, auth_get_current_user_id(), $p_bug->project_id );
 	echo '<td class="column-status">';
 	echo '<div class="align-left">';
-	echo '<i class="fa fa-square-o fa-xlg ' . $status_label . '"></i> ';
+	echo '<i class="fa fa-square fa-status-box ' . $status_label . '"></i> ';
 	printf( '<span title="%s">%s</span>',
 		get_enum_element( 'resolution', $p_bug->resolution, auth_get_current_user_id(), $p_bug->project_id ),
 		get_enum_element( 'status', $p_bug->status, auth_get_current_user_id(), $p_bug->project_id )

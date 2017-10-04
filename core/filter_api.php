@@ -562,19 +562,19 @@ function filter_ensure_valid_filter( array $p_filter_arr ) {
 	$t_config_view_filters = config_get( 'view_filters' );
 	$t_view_type = $p_filter_arr['_view_type'];
 	if( ADVANCED_ONLY == $t_config_view_filters ) {
-		$t_view_type = 'advanced';
+		$t_view_type = FILTER_VIEW_TYPE_ADVANCED;
 	}
 	if( SIMPLE_ONLY == $t_config_view_filters ) {
-		$t_view_type = 'simple';
+		$t_view_type = FILTER_VIEW_TYPE_SIMPLE;
 	}
-	if( !in_array( $t_view_type, array( 'simple', 'advanced' ) ) ) {
+	if( !in_array( $t_view_type, array( FILTER_VIEW_TYPE_SIMPLE, FILTER_VIEW_TYPE_ADVANCED ) ) ) {
 		$t_view_type = filter_get_default_view_type();
 	}
 	$p_filter_arr['_view_type'] = $t_view_type;
 
 	$t_sort_fields = explode( ',', $p_filter_arr[FILTER_PROPERTY_SORT_FIELD_NAME] );
 	$t_dir_fields = explode( ',', $p_filter_arr[FILTER_PROPERTY_SORT_DIRECTION] );
-	# both arrays should be equal lenght, just in case
+	# both arrays should be equal length, just in case
 	$t_sort_fields_count = min( count( $t_sort_fields ), count( $t_dir_fields ) );
 
 	# clean up sort fields, remove invalid columns
@@ -618,8 +618,45 @@ function filter_ensure_valid_filter( array $p_filter_arr ) {
 		$p_filter_arr[FILTER_PROPERTY_SORT_DIRECTION] = filter_get_default_property( FILTER_PROPERTY_SORT_DIRECTION, $t_view_type );
 	}
 
-	# validate or filter junk from other fields
-	$t_multi_select_list = array(
+	# Validate types for values.
+
+	# helper function to validate types
+	$t_function_validate_type = function( $p_value, $p_type ) {
+		$t_value = stripslashes( $p_value );
+		if( ( $t_value === 'any' ) || ( $t_value === '[any]' ) ) {
+			$t_value = META_FILTER_ANY;
+		}
+		if( ( $t_value === 'none' ) || ( $t_value === '[none]' ) ) {
+			$t_value = META_FILTER_NONE;
+		}
+		# Ensure the filter property has the right type - see #20087
+		switch( $p_type ) {
+			case 'string' :
+			case 'int' :
+				settype( $t_value, $p_type );
+				break;
+		}
+		return $t_value;
+	};
+
+	# Validate properties that must not be arrays
+	$t_single_value_list = array(
+		FILTER_PROPERTY_VIEW_STATE => 'int',
+	);
+	foreach( $t_single_value_list as $t_field_name => $t_field_type ) {
+		$t_value = $p_filter_arr[$t_field_name];
+		if( is_array( $t_value ) ) {
+			if( count( $t_value ) > 0 ) {
+				$p_filter_arr[$t_field_name] = reset( $t_value );
+			} else {
+				$p_filter_arr[$t_field_name] = filter_get_default_property( $t_field_name, $t_view_type );
+			}
+		}
+		$p_filter_arr[$t_field_name] = $t_function_validate_type( $p_filter_arr[$t_field_name], $t_field_type );
+	}
+
+	# Validate properties that must be arrays, and the type of its elements
+	$t_array_values_list = array(
 		FILTER_PROPERTY_CATEGORY_ID => 'string',
 		FILTER_PROPERTY_SEVERITY => 'int',
 		FILTER_PROPERTY_STATUS => 'int',
@@ -640,7 +677,7 @@ function filter_ensure_valid_filter( array $p_filter_arr ) {
 		FILTER_PROPERTY_OS_BUILD => 'string',
 		FILTER_PROPERTY_PROJECT_ID => 'int'
 	);
-	foreach( $t_multi_select_list as $t_multi_field_name => $t_multi_field_type ) {
+	foreach( $t_array_values_list as $t_multi_field_name => $t_multi_field_type ) {
 		if( !is_array( $p_filter_arr[$t_multi_field_name] ) ) {
 			$p_filter_arr[$t_multi_field_name] = array(
 				$p_filter_arr[$t_multi_field_name],
@@ -648,21 +685,7 @@ function filter_ensure_valid_filter( array $p_filter_arr ) {
 		}
 		$t_checked_array = array();
 		foreach( $p_filter_arr[$t_multi_field_name] as $t_filter_value ) {
-			$t_filter_value = stripslashes( $t_filter_value );
-			if( ( $t_filter_value === 'any' ) || ( $t_filter_value === '[any]' ) ) {
-				$t_filter_value = META_FILTER_ANY;
-			}
-			if( ( $t_filter_value === 'none' ) || ( $t_filter_value === '[none]' ) ) {
-				$t_filter_value = META_FILTER_NONE;
-			}
-			# Ensure the filter property has the right type - see #20087
-			switch( $t_multi_field_type ) {
-				case 'string' :
-				case 'int' :
-					settype( $t_filter_value, $t_multi_field_type );
-					break;
-			}
-			$t_checked_array[] = $t_filter_value;
+			$t_checked_array[] = $t_function_validate_type( $t_filter_value, $t_multi_field_type );
 		}
 		$p_filter_arr[$t_multi_field_name] = $t_checked_array;
 	}
@@ -692,7 +715,7 @@ function filter_ensure_valid_filter( array $p_filter_arr ) {
 	# If view_type is advanced, and hide_status is present, modify status array
 	# to remove hidden status. This may happen after switching from simple to advanced.
 	# Then, remove hide_status property, as it does not apply to advanced filter
-	if( $p_filter_arr['_view_type'] == 'advanced'
+	if( $p_filter_arr['_view_type'] == FILTER_VIEW_TYPE_ADVANCED
 			&& !filter_field_is_none( $p_filter_arr[FILTER_PROPERTY_HIDE_STATUS] ) ) {
 		if( filter_field_is_any( $p_filter_arr[FILTER_PROPERTY_STATUS] ) ) {
 			$t_selected_status_array = MantisEnum::getValues( config_get( 'status_enum_string' ) );
@@ -715,7 +738,7 @@ function filter_ensure_valid_filter( array $p_filter_arr ) {
 	}
 
 	#If view_type is simple, resolve conflicts between show_status and hide_status
-	if( $p_filter_arr['_view_type'] == 'simple'
+	if( $p_filter_arr['_view_type'] == FILTER_VIEW_TYPE_SIMPLE
 			&& !filter_field_is_none( $p_filter_arr[FILTER_PROPERTY_HIDE_STATUS] ) ) {
 		# get array of hidden status ids
 		$t_all_status = MantisEnum::getValues( config_get( 'status_enum_string' ) );
@@ -745,14 +768,14 @@ function filter_ensure_valid_filter( array $p_filter_arr ) {
  * Get a filter array with default values
  * Optional view type parameter is used to initialize some fields properly,
  * as some may differ in the default content.
- * @param string $p_view_type	"simple" or "advanced"
+ * @param string $p_view_type	FILTER_VIEW_TYPE_SIMPLE or FILTER_VIEW_TYPE_ADVANCED
  * @return array Filter array with default values
  */
 function filter_get_default_array( $p_view_type = null ) {
 	static $t_cache_default_array = array();
 
 	$t_default_view_type = filter_get_default_view_type();
-	if( !in_array( $p_view_type, array( 'simple', 'advanced' ) ) ) {
+	if( !in_array( $p_view_type, array( FILTER_VIEW_TYPE_SIMPLE, FILTER_VIEW_TYPE_ADVANCED ) ) ) {
 		$p_view_type = $t_default_view_type;
 	}
 
@@ -766,14 +789,14 @@ function filter_get_default_array( $p_view_type = null ) {
 
 	$t_config_view_filters = config_get( 'view_filters' );
 	if( ADVANCED_ONLY == $t_config_view_filters ) {
-		$t_view_type = 'advanced';
+		$t_view_type = FILTER_VIEW_TYPE_ADVANCED;
 	} elseif( SIMPLE_ONLY == $t_config_view_filters ) {
-		$t_view_type = 'simple';
+		$t_view_type = FILTER_VIEW_TYPE_SIMPLE;
 	} else {
 		$t_view_type = $p_view_type;
 	}
 
-	if( $t_view_type == 'simple' ) {
+	if( $t_view_type == FILTER_VIEW_TYPE_SIMPLE ) {
 		$t_hide_status_default = config_get( 'hide_status_default' );
 	} else {
 		$t_hide_status_default = META_FILTER_NONE;
@@ -877,9 +900,9 @@ function filter_get_default_array( $p_view_type = null ) {
  */
 function filter_get_default_view_type() {
 	if( ADVANCED_DEFAULT == config_get( 'view_filters' ) ) {
-		return 'advanced';
+		return FILTER_VIEW_TYPE_ADVANCED;
 	} else {
-		return 'simple';
+		return FILTER_VIEW_TYPE_SIMPLE;
 	}
 }
 
@@ -1378,7 +1401,7 @@ function filter_get_bug_rows_query_clauses( array $p_filter, $p_project_id = nul
 	);
 
 	# normalize the project filtering into an array $t_project_ids
-	if( 'simple' == $t_view_type ) {
+	if( FILTER_VIEW_TYPE_SIMPLE == $t_view_type ) {
 		log_event( LOG_FILTERING, 'Simple Filter' );
 		$t_project_ids = array(
 			$t_project_id,
@@ -1401,7 +1424,7 @@ function filter_get_bug_rows_query_clauses( array $p_filter, $p_project_id = nul
 	log_event( LOG_FILTERING, 'include sub-projects = ' . ( $t_include_sub_projects ? '1' : '0' ) );
 
 	# if the array has ALL_PROJECTS, then reset the array to only contain ALL_PROJECTS.
-	# replace META_FILTER_CURRENT with the actualy current project id.
+	# replace META_FILTER_CURRENT with the actually current project id.
 	$t_all_projects_found = false;
 	$t_new_project_ids = array();
 	foreach( $t_project_ids as $t_pid ) {
@@ -1469,6 +1492,8 @@ function filter_get_bug_rows_query_clauses( array $p_filter, $p_project_id = nul
 		$t_private_and_public_project_ids = array();
 		$t_limited_projects = array();
 
+		# make sure the project rows are cached, as they will be used to check access levels.
+		project_cache_array_rows( $t_project_ids );
 		foreach( $t_project_ids as $t_pid ) {
 			# limit reporters to visible projects
 			if( ( ON === $t_limit_reporters ) && ( !access_has_project_level( access_threshold_min_level( config_get( 'report_bug_threshold', null, $t_user_id, $t_pid ) ) + 1, $t_pid, $t_user_id ) ) ) {
@@ -1682,7 +1707,7 @@ function filter_get_bug_rows_query_clauses( array $p_filter, $p_project_id = nul
 	$t_desired_statuses = $t_filter[FILTER_PROPERTY_STATUS];
 
 	# simple filtering: restrict by the hide status value if present
-	if( 'simple' == $t_filter['_view_type'] ) {
+	if( FILTER_VIEW_TYPE_SIMPLE == $t_filter['_view_type'] ) {
 		if( isset( $t_filter[FILTER_PROPERTY_HIDE_STATUS][0] ) && !filter_field_is_none( $t_filter[FILTER_PROPERTY_HIDE_STATUS][0] ) ) {
 			$t_selected_status_array = $t_filter[FILTER_PROPERTY_STATUS];
 			# if we have metavalue for "any", expand to all status, to filter them
@@ -2411,7 +2436,6 @@ function filter_draw_selection_area2( $p_page_number, $p_for_screen = true, $p_e
 			</h4>
 			<div class="widget-toolbar">
 				<?php
-					$f_switch_view_link = (config_get('use_dynamic_filters')) ? 'view_all_set.php?type=6&amp;view_type=' : 'view_filters_page.php?view_type=';
 					$t_view_filters = config_get('view_filters');
 
 					if( ( ( SIMPLE_ONLY != $t_view_filters ) && ( ADVANCED_ONLY != $t_view_filters ) ) ||
@@ -2423,18 +2447,17 @@ function filter_draw_selection_area2( $p_page_number, $p_for_screen = true, $p_e
 						</a>
 						<ul class="dropdown-menu dropdown-menu-right dropdown-yellow dropdown-caret dropdown-closer">
 							<?php
-							if( ( SIMPLE_ONLY != $t_view_filters ) && ( ADVANCED_ONLY != $t_view_filters ) ) {
-								echo '<li>';
-								if( 'advanced' == $t_view_type ) {
-									echo '<a href="' . $f_switch_view_link, 'simple"><i class="ace-icon fa fa-toggle-off"></i>&#160;&#160;' . lang_get('simple_filters') . '</a>';
-								} else {
-									echo '<a href="' . $f_switch_view_link, 'advanced"><i class="ace-icon fa fa-toggle-on"></i>&#160;&#160;' . lang_get('advanced_filters') . '</a>';
-								}
-								echo '</li>';
-							}
+							$t_url = config_get( 'use_dynamic_filters' )
+								? 'view_all_set.php?type=6&amp;view_type='
+								: 'view_filters_page.php?view_type=';
+							filter_print_view_type_toggle( $t_url, $t_filter['_view_type'] );
+
 							if( access_has_project_level( config_get( 'create_permalink_threshold' ) ) ) {
+								# Add CSRF protection, see #22702
+								$t_permalink_url = urlencode( filter_get_url( $t_filter ) )
+									. form_security_param( 'permalink' );
 								echo '<li>';
-								echo '<a href="permalink_page.php?url=' . urlencode( filter_get_url( $t_filter ) ) . '">';
+								echo '<a href="permalink_page.php?url=' . $t_permalink_url . '">';
 								echo '<i class="ace-icon fa fa-link"></i>&#160;&#160;' . lang_get( 'create_filter_link' );
 								echo '</a>';
 								echo '</li>';
@@ -2981,7 +3004,7 @@ function filter_name_valid_length( $p_name ) {
 }
 
 /**
- * Create a filter for getting issues modified in the last N days
+ * Create a filter for getting issues modified in the last N days.
  * @param integer $p_days Number of days counting from today
  * @param array $p_filter Add the filter conditions over this filter array. Return a new one if null
  * @return array Filter array
@@ -2989,6 +3012,8 @@ function filter_name_valid_length( $p_name ) {
 function filter_create_recently_modified( $p_days, $p_filter = null ) {
 	if( null === $p_filter ) {
 		$p_filter = filter_get_default();
+		# This filter overrides default "hide status" property
+		$p_filter[FILTER_PROPERTY_HIDE_STATUS] = META_FILTER_NONE;
 	}
 	$c_days = (int)$p_days;
 	$p_filter[FILTER_PROPERTY_FILTER_BY_LAST_UPDATED_DATE] = true;
@@ -3150,13 +3175,13 @@ function filter_gpc_get( array $p_filter = null ) {
 		$f_sort = implode( ',', $t_new_sort_array );
 		$f_dir = implode( ',', $t_new_dir_array );
 	} elseif( null !== $f_sort_add ) {
-		# this parameter has to be pushed in fron t of current sort set
+		# this parameter has to be pushed in front of current sort set
 		$f_dir_add = gpc_get_string( FILTER_PROPERTY_SORT_DIRECTION . '_add', '' );
 		# Plain concatenation. Empty fields, or extra commas will be cleaned by ensure_valid_filter
 		$f_sort = $f_sort_add . ',' . $t_filter[FILTER_PROPERTY_SORT_FIELD_NAME];
 		$f_dir = $f_dir_add . ',' . $t_filter[FILTER_PROPERTY_SORT_DIRECTION];
 	} else {
-		# use the defaluts
+		# use the defaults
 		$f_sort = $t_filter[FILTER_PROPERTY_SORT_FIELD_NAME];
 		$f_dir = $t_filter[FILTER_PROPERTY_SORT_DIRECTION];
 	}
@@ -3215,10 +3240,16 @@ function filter_gpc_get( array $p_filter = null ) {
 
 	# custom field updates
 	$t_custom_fields 		= custom_field_get_ids(); # @todo (thraxisp) This should really be the linked ids, but we don't know the project
-	$f_custom_fields_data 	= array();
+	$f_custom_fields_data 	= $t_filter['custom_fields'];
 	if( is_array( $t_custom_fields ) && ( count( $t_custom_fields ) > 0 ) ) {
 		foreach( $t_custom_fields as $t_cfid ) {
 			if( custom_field_type( $t_cfid ) == CUSTOM_FIELD_TYPE_DATE ) {
+
+				# check if gpc parameters are present, otherwise skip parsing.
+				if( !gpc_isset( 'custom_field_' . $t_cfid . '_control' ) ) {
+					continue;
+				}
+
 				$f_custom_fields_data[$t_cfid] = array();
 
 				# Get date control property
@@ -3301,6 +3332,12 @@ function filter_gpc_get( array $p_filter = null ) {
 				$f_custom_fields_data[$t_cfid][2] = $t_end;
 
 			} else {
+
+				# check if gpc parameters are present, otherwise skip parsing.
+				if( !gpc_isset( 'custom_field_' . $t_cfid ) ) {
+					continue;
+				}
+
 				if( is_array( gpc_get( 'custom_field_' . $t_cfid, null ) ) ) {
 					$f_custom_fields_data[$t_cfid] = gpc_get_string_array( 'custom_field_' . $t_cfid, array( META_FILTER_ANY ) );
 				} else {
@@ -3441,4 +3478,35 @@ function filter_is_accessible( $p_filter_id, $p_user_id = null ) {
 		}
 	}
 	return false;
+}
+
+/**
+ * Prints the simple/advanced menu item toggle if needed
+ * @param string $p_url       Target URL, must end with 'view_type='
+ * @param string $p_view_type Filter view type (FILTER_VIEW_TYPE_SIMPLE or
+ *                            FILTER_VIEW_TYPE_ADVANCED)
+ */
+function filter_print_view_type_toggle( $p_url, $p_view_type ) {
+	$t_view_filters = config_get( 'view_filters' );
+	if( $t_view_filters == SIMPLE_ONLY || $t_view_filters == ADVANCED_ONLY ) {
+		return;
+	}
+
+	if( $p_view_type == FILTER_VIEW_TYPE_ADVANCED ) {
+		$t_url = $p_url . FILTER_VIEW_TYPE_SIMPLE;
+		$t_icon = 'fa-toggle-off';
+		$t_lang_string = 'simple_filters';
+	} else {
+		$t_url = $p_url . FILTER_VIEW_TYPE_ADVANCED;
+		$t_icon = 'fa-toggle-on';
+		$t_lang_string = 'advanced_filters';
+	}
+
+	echo '<li>';
+	printf( '<a href="%s"><i class="ace-icon fa %s"></i>&#160;&#160;%s</a>',
+		$t_url,
+		$t_icon,
+		lang_get( $t_lang_string )
+	);
+	echo '</li>';
 }
